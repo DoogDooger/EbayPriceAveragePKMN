@@ -47,6 +47,7 @@ def parse_input(user_input, quantity_mode):
 def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_mode, grading_companies=[]):
     """Fetches eBay data item by item and includes individual listings in the results."""
     results = []
+    averages = []  # Store average prices for each item
     for _, row in data.iterrows():
         # Fetch data
         item_name = row["Item"]
@@ -76,6 +77,7 @@ def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_m
 
         # Recalculate average price after filtering
         avg_price = sum(prices) / len(prices) if prices else None
+        averages.append({"Item": item_name, "Unit Average Price (GBP)": avg_price, "Warning": warning})
 
         # Add individual listings to the results
         for price, link, title in zip(prices, links, titles):
@@ -95,7 +97,7 @@ def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_m
                 "Link": None
             })
 
-    return results
+    return averages, results
 
 def get_access_token():
     """Generates a new access token using the refresh token."""
@@ -279,7 +281,7 @@ if st.button("Refresh Prices"):
                     data = data[["Item"]]  # Keep only the Item column
 
             # Fetch eBay data (Active Listings only)
-            results = fetch_ebay_data(
+            averages, results = fetch_ebay_data(
                 data, 
                 include_shipping=include_shipping, 
                 sale_type=sale_type, 
@@ -290,9 +292,18 @@ if st.button("Refresh Prices"):
 
             # Display results
             if results:
+                # Display average prices
+                averages_df = pd.DataFrame(averages)  # Convert averages to a DataFrame
+                st.markdown("### Average Prices")
+                st.markdown(averages_df.to_markdown(index=False), unsafe_allow_html=True)
+
+                # Display individual listings
                 results_df = pd.DataFrame(results)  # Convert the list of results to a DataFrame
+                st.markdown("### Individual Listings")
                 st.markdown(results_df.to_markdown(index=False), unsafe_allow_html=True)
-                st.download_button("Download CSV", results_df.to_csv(index=False), "results.csv")
+
+                # Add download button for individual listings
+                st.download_button("Download Listings CSV", results_df.to_csv(index=False), "listings.csv")
             else:
                 st.warning("No results to display.")
 
