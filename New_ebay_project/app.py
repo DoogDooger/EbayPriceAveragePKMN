@@ -482,10 +482,10 @@ if st.session_state.active_tab == "Search":
                 st.caption("Format: item name")
         elif input_mode == "CSV Mode":
             uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-            if quantity_mode == "No Quantity":  # Add the missing "==" comparison operator
-                st.caption("CSV must contain 'Item' and 'Quantity' columns")
+            if quantity_mode == "Quantity":  # Correct condition
+                st.caption("CSV must contain 'Item' and 'Quantity' columns")  # Correct message
             else:
-                st.caption("CSV must contain an 'Item' column")
+                st.caption("CSV must contain an 'Item' column")  # Correct message
     
     # Filtering options in an expander
     with st.expander("📊 Filtering Options", expanded=True):
