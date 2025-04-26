@@ -45,7 +45,7 @@ def parse_input(user_input, quantity_mode):
             st.warning(f"Invalid line format: {line}")
     return pd.DataFrame(data)
 
-@st.cache_data
+@st.cache_data(ttl=600)  # Cache for 10 minutes
 def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_mode, grading_companies=[], exclude_outliers=False):
     """Fetches eBay data item by item and includes individual listings in the results."""
     results = []
@@ -54,7 +54,15 @@ def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_m
     # Define the complete list of grading companies to filter
     all_grading_companies = ["PSA", "BECKETT", "BGS", "CGC", "SGC", "AGS", "TAG", "ACE", "PG", "GET GRADED"]
     
-    for _, row in data.iterrows():
+    progress_bar = st.progress(0)
+    total_items = len(data)
+    
+    for i, (_, row) in enumerate(data.iterrows()):
+        # Update progress
+        progress_text = f"Fetching data for item {i+1} of {total_items}: {row['Item']}"
+        st.write(progress_text)
+        progress_bar.progress((i+1)/total_items)
+        
         # Fetch data
         item_name = row["Item"]
         quantity = row.get("Quantity", 1)  # Default to 1 if no quantity is provided
@@ -92,26 +100,33 @@ def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_m
                 "Price (GBP)": None,
                 "Link": None
             })
-
+    
+    progress_bar.empty()  # Clear the progress bar when done
     return averages, results
 
 def get_access_token():
     """Generates a new access token using the refresh token."""
-    url = "https://api.ebay.com/identity/v1/oauth2/token"
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": f"Basic {base64_credentials()}"
-    }
-    data = {
-        "grant_type": "refresh_token",
-        "refresh_token": EBAY_API_REFRESH_TOKEN,
-        "scope": "https://api.ebay.com/oauth/api_scope"
-    }
-    response = requests.post(url, headers=headers, data=data)
-    if response.status_code == 200:
-        return response.json()["access_token"]
-    else:
-        raise Exception(f"Error refreshing access token: {response.json()}")
+    try:
+        url = "https://api.ebay.com/identity/v1/oauth2/token"
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Basic {base64_credentials()}"
+        }
+        data = {
+            "grant_type": "refresh_token",
+            "refresh_token": EBAY_API_REFRESH_TOKEN,
+            "scope": "https://api.ebay.com/oauth/api_scope"
+        }
+        response = requests.post(url, headers=headers, data=data)
+        if response.status_code == 200:
+            return response.json()["access_token"]
+        elif response.status_code == 401:
+            raise Exception("Authentication failed. Please check your eBay API credentials.")
+        else:
+            raise Exception(f"Error refreshing access token: {response.json()}")
+    except requests.exceptions.ConnectionError:
+        st.error("Network connection error. Please check your internet connection and try again.")
+        st.stop()
 
 def base64_credentials():
     """Generates Base64-encoded credentials."""
@@ -169,8 +184,14 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
             # Make the API request
             response = requests.get(url, headers=headers)
 
+            if response.status_code == 429:  # Too Many Requests
+                st.warning("eBay API rate limit reached. Waiting before retrying...")
+                time.sleep(5)  # Wait 5 seconds before retrying
+                response = requests.get(url, headers=headers)
+                
             if response.status_code != 200:
-                raise Exception(f"eBay API Error: {response.json()}")
+                error_message = response.json().get('errors', [{'message': 'Unknown error'}])[0].get('message', 'Unknown error')
+                raise Exception(f"eBay API Error: {error_message} (Status code: {response.status_code})")
 
             # Parse the response
             response_data = response.json()
@@ -408,6 +429,20 @@ if st.button("Refresh Prices"):
                     if data.empty:
                         st.error("CSV file contains no data. Please add items and try again.")
                         st.stop()
+
+                    # For CSV input when quantity is expected
+                    if quantity_mode == "Quantity":
+                        # Check if Quantity column is present and contains valid numbers
+                        if "Quantity" not in data.columns:
+                            st.error("CSV file must contain a 'Quantity' column when Quantity mode is selected.")
+                            st.stop()
+                        
+                        # Verify all quantities are valid numbers
+                        try:
+                            data["Quantity"] = data["Quantity"].astype(int)
+                        except ValueError:
+                            st.error("All values in the Quantity column must be valid integers.")
+                            st.stop()
 
                 # Fetch eBay data (Active Listings only)
                 averages, results = fetch_ebay_data(
