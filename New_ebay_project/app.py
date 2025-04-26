@@ -230,6 +230,10 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
         # Unpack the sorted results back into separate lists
         filtered_prices, filtered_links, filtered_titles = zip(*filtered_results) if filtered_results else ([], [], [])
 
+        # Apply outlier filtering if requested - ADD THIS CODE
+        if exclude_outliers and len(filtered_prices) >= 4:
+            filtered_prices, filtered_links, filtered_titles = filter_outliers(filtered_prices, filtered_links, filtered_titles)
+
         # Restrict the number of listings to the selected count
         filtered_prices = filtered_prices[:listing_count]
         filtered_links = filtered_links[:listing_count]
