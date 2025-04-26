@@ -128,8 +128,10 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
         # Words to exclude from search results
         excluded_words = ["Magnetic", "Stand", "Proxy", "Custom", "Box", "Playmat"]
         
-        # Check if item name contains "promo"
-        is_promo_search = "promo" in item_name.lower()
+        # Check if item name contains promo types
+        item_lower = item_name.lower()
+        is_promo_search = "promo" in item_lower
+        is_pokemon_center_promo = any(pc in item_lower for pc in ["pokemon center promo", "pokemon centre promo"])
             
         # Get a new access token
         access_token = get_access_token()
@@ -201,11 +203,25 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
             # Skip if title contains any excluded words
             if any(word.lower() in title_lower for word in excluded_words):
                 continue
-                
-            # If searching for a promo item, ensure the listing contains "promo"
-            if is_promo_search and "promo" not in title_lower:
-                continue
-                
+            
+            # Promo filtering logic:
+            # 1. If searching for Pokémon Center/Centre promo, only include listings with those terms
+            # 2. If searching for regular promo (but not Pokémon Center), exclude Pokémon Center/Centre promos
+            # 3. If not searching for promos at all, this section doesn't apply
+            
+            if is_pokemon_center_promo:
+                # Must contain either "pokemon center" or "pokemon centre"
+                if not any(pc in title_lower for pc in ["pokemon center", "pokemon centre"]):
+                    continue
+                    
+            elif is_promo_search:
+                # If just "promo" (not Pokémon Center promo), exclude Pokémon Center/Centre promos
+                if any(pc in title_lower for pc in ["pokemon center", "pokemon centre"]):
+                    continue
+                # Must contain "promo"
+                if "promo" not in title_lower:
+                    continue
+            
             # Check if no grading companies selected - filter out ALL items with ANY grading company
             if not grading_companies:
                 # Skip this item if it contains any grading company name
@@ -215,7 +231,7 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
             elif not any(company.lower() in title_lower for company in grading_companies):
                 continue
                 
-            # Basic item name matching - simplify this for now
+            # Basic item name matching
             if improved_item_matching(item_name, title):
                 filtered_prices.append(price)
                 filtered_links.append(link)
