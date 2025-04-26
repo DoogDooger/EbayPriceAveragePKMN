@@ -405,16 +405,27 @@ st.markdown("""
 # Use a nicer header with the CSS class
 st.markdown("<h1 class='main-header'>eBay Price Averager</h1>", unsafe_allow_html=True)
 
-# Set up tab navigation
-if "active_tab" not in st.session_state:
-    st.session_state.active_tab = "Search"
+# Set up tab navigation with error protection
+if "active_tab" not in st.session_state or st.session_state.active_tab not in ["Search", "Results", "Help"]:
+    st.session_state.active_tab = "Search"  # Default to Search if invalid value
 
 # Navigation with radio buttons styled to look like tabs
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    st.session_state.active_tab = st.radio("", ["Search", "Results", "Help"], 
-                                          index=["Search", "Results", "Help"].index(st.session_state.active_tab),
-                                          horizontal=True, label_visibility="collapsed")
+    try:
+        # Try to set the radio button to the current active tab
+        st.session_state.active_tab = st.radio(
+            "", 
+            ["Search", "Results", "Help"], 
+            index=["Search", "Results", "Help"].index(st.session_state.active_tab),
+            horizontal=True, 
+            label_visibility="collapsed"
+        )
+    except (ValueError, IndexError):
+        # If the active_tab value is invalid, reset to Search
+        st.session_state.active_tab = "Search"
+        # Rerun to apply the fix
+        st.rerun()
 
 # Add some styling to make it look more like tabs
 st.markdown("""
@@ -514,9 +525,19 @@ if st.session_state.active_tab == "Search":
     with refresh_col2:
         refresh_button = st.button("🔄 Refresh Prices", use_container_width=True)
 
-# Results tab will be populated later
-elif st.session_state.active_tab == "Results":  
-    st.info("Click 'Refresh Prices' on the Search tab to see results here.")
+# Results tab
+elif st.session_state.active_tab == "Results":
+    if "averages" in st.session_state and "results" in st.session_state:
+        averages = st.session_state.averages
+        results = st.session_state.results
+        
+        # Display results here...
+        st.subheader("Results")
+        
+        # Your existing results display code...
+        
+    else:
+        st.info("Click 'Refresh Prices' on the Search tab to see results here.")
 
 # Help tab with usage instructions
 elif st.session_state.active_tab == "Help":
@@ -547,6 +568,50 @@ if refresh_button:
     elif input_mode == "CSV Mode" and not uploaded_file:
         st.error("No CSV file uploaded. Please upload a file then try again.")
     else:
-        # Switch to Results tab
-        st.session_state.active_tab = "Results" 
-        st.rerun()  # Use st.rerun() instead of st.experimental_rerun()
+        with st.spinner("Fetching data from eBay..."):
+            try:
+                # Parse input
+                if input_mode == "Paste Mode":
+                    data = parse_input(user_input, quantity_mode)
+                    
+                    # Check if parsing resulted in empty dataframe
+                    if data.empty:
+                        st.error("No valid items found in input. Please check format and try again.")
+                        st.stop()
+                        
+                elif input_mode == "CSV Mode" and uploaded_file:
+                    data = pd.read_csv(uploaded_file)
+                    if quantity_mode == "No Quantity":
+                        data = data[["Item"]]  # Keep only the Item column
+                    
+                    # Check if CSV has required columns
+                    if "Item" not in data.columns:
+                        st.error("CSV file must contain an 'Item' column. Please fix and try again.")
+                        st.stop()
+                    
+                    # Check if CSV has any rows
+                    if data.empty:
+                        st.error("CSV file contains no data. Please add items and try again.")
+                        st.stop()
+
+                # Fetch eBay data (Active Listings only)
+                averages, results = fetch_ebay_data(
+                    data, 
+                    include_shipping=include_shipping, 
+                    sale_type=sale_type, 
+                    listing_count=listing_count, 
+                    quantity_mode=quantity_mode, 
+                    grading_companies=grading_companies,
+                    exclude_outliers=exclude_outliers
+                )
+                
+                # Store results in session state
+                st.session_state.averages = averages
+                st.session_state.results = results
+                
+                # Set active tab to Results after processing is complete
+                st.session_state.active_tab = "Results"
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
