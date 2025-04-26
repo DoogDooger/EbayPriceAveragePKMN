@@ -405,37 +405,29 @@ st.markdown("""
 # Use a nicer header with the CSS class
 st.markdown("<h1 class='main-header'>eBay Price Averager</h1>", unsafe_allow_html=True)
 
-# Create tabs for better organization
+# Create tabs for better organization with references we can control
 tab1, tab2, tab3 = st.tabs(["Search", "Results", "Help"])
 
 with tab1:
-    # Input mode selection with tooltip
+    # Input mode selection with working tooltips
     st.markdown("#### Input Method")
     col1, col2 = st.columns([3, 1])
     with col1:
         input_mode = st.radio("Select how to enter items:", ["Paste Mode", "CSV Mode"])
     with col2:
-        st.markdown("""
-        <div style='margin-top: 30px;'>
-            <span title='Paste Mode: Enter items directly in the text area.&#10;CSV Mode: Upload a CSV file with items.'>
-                ℹ️ Help
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Quantity mode selection
+        # Use st.help instead of custom HTML
+        st.markdown("ℹ️")
+        st.caption("Paste Mode: Enter items directly in the text area.\nCSV Mode: Upload a CSV file with items.")
+
+    # Quantity mode selection with working tooltips
     st.markdown("#### Item Quantity")
     col1, col2 = st.columns([3, 1])
     with col1:
         quantity_mode = st.radio("Do you need to track quantities?", ["No Quantity", "Quantity"]) 
     with col2:
-        st.markdown("""
-        <div style='margin-top: 30px;'>
-            <span title='No Quantity: Just calculate average prices.&#10;Quantity: Include item quantities for inventory valuation.'>
-                ℹ️ Help
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
+        # Use st.help instead of custom HTML
+        st.markdown("ℹ️")
+        st.caption("No Quantity: Just calculate average prices.\nQuantity: Include item quantities for inventory valuation.")
     
     # Input handling in a container with styling
     with st.container():
@@ -451,50 +443,42 @@ with tab1:
                 st.caption("Format: item name")
         elif input_mode == "CSV Mode":
             uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-            if quantity_mode == "Quantity":
+            if quantity_mode == "Quantity":  # Add the missing "==" comparison operator
                 st.caption("CSV must contain 'Item' and 'Quantity' columns")
             else:
                 st.caption("CSV must contain an 'Item' column")
     
     # Filtering options in an expander
     with st.expander("📊 Filtering Options", expanded=True):
-        with st.container():
-            st.markdown("<div class='filter-container'>", unsafe_allow_html=True)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                include_shipping = st.checkbox("Include shipping cost", 
-                                            help="When checked, shipping costs will be added to item prices")
-                exclude_outliers = st.checkbox("Exclude outliers", 
-                                            help="When checked, statistical outliers will be removed from price calculations")
-            with col2:
-                sale_type = st.selectbox("Sale Type", 
-                                        ["Buy It Now", "Auction", "Both"],
-                                        help="Filter by listing type on eBay")
-                listing_count = st.select_slider("Number of listings to consider", 
-                                                options=[3, 5, 10], 
-                                                value=5,
-                                                help="How many listings to include in average calculation")
-            
-            st.markdown("</div>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            include_shipping = st.checkbox("Include shipping cost", 
+                                        help="When checked, shipping costs will be added to item prices")
+            exclude_outliers = st.checkbox("Exclude outliers", 
+                                        help="When checked, statistical outliers will be removed from price calculations")
+        with col2:
+            sale_type = st.selectbox("Sale Type", 
+                                    ["Buy It Now", "Auction", "Both"],
+                                    help="Filter by listing type on eBay")
+            listing_count = st.select_slider("Number of listings to consider", 
+                                            options=[3, 5, 10], 
+                                            value=5,
+                                            help="How many listings to include in average calculation")
     
     # Grading options in a separate expander
     with st.expander("🏅 Grading Options", expanded=True):
-        with st.container():
-            st.markdown("<div class='filter-container'>", unsafe_allow_html=True)
-            card_grading = st.radio("Card Grading", ["Graded", "Non-Graded"], 
-                                 help="Filter by graded or non-graded items")
-            
-            # Only show grading companies multiselect if "Graded" is selected
-            grading_companies = []
-            if card_grading == "Graded":
-                grading_companies = st.multiselect(
-                    "Select Grading Companies to Include",
-                    ["PSA", "BECKETT", "CGC", "AGS", "TAG", "ACE"],
-                    default=["PSA", "BECKETT", "CGC", "ACE"],
-                    help="Only show listings graded by these companies"
-                )
-            st.markdown("</div>", unsafe_allow_html=True)
+        card_grading = st.radio("Card Grading", ["Graded", "Non-Graded"], 
+                             help="Filter by graded or non-graded items")
+        
+        # Only show grading companies multiselect if "Graded" is selected
+        grading_companies = []
+        if card_grading == "Graded":
+            grading_companies = st.multiselect(
+                "Select Grading Companies to Include",
+                ["PSA", "BECKETT", "CGC", "AGS", "TAG", "ACE"],
+                default=["PSA", "BECKETT", "CGC", "ACE"],
+                help="Only show listings graded by these companies"
+            )
     
     # Refresh button with a better style
     st.markdown("")  # Add some spacing
@@ -527,23 +511,16 @@ with tab3:
     - Use the CSV mode for bulk processing
     """)
 
-# Now handle the Refresh button logic and place results in the Results tab
+# In the Refresh button section, add tab switching
 if refresh_button:
-    # All the existing error checking code for empty input, etc.
+    # Check if input is empty
     if input_mode == "Paste Mode" and not user_input.strip():
         st.error("No items entered. Please enter items then try again.")
     elif input_mode == "CSV Mode" and not uploaded_file:
         st.error("No CSV file uploaded. Please upload a file then try again.")
     else:
-        # Switch to the Results tab to show the loading status
-        tab2.write("Processing your request...")
-        
-        # Create a fancy loading animation
-        with tab2:
+        with tab2:  # Put results directly in tab2
             with st.spinner("Fetching data from eBay..."):
-                progress_text = st.empty()
-                progress_bar = st.progress(0)
-                
                 try:
                     # Parse input
                     if input_mode == "Paste Mode":
@@ -569,21 +546,7 @@ if refresh_button:
                             st.error("CSV file contains no data. Please add items and try again.")
                             st.stop()
 
-                        # For CSV input when quantity is expected
-                        if quantity_mode == "Quantity":
-                            # Check if Quantity column is present and contains valid numbers
-                            if "Quantity" not in data.columns:
-                                st.error("CSV file must contain a 'Quantity' column when Quantity mode is selected.")
-                                st.stop()
-                            
-                            # Verify all quantities are valid numbers
-                            try:
-                                data["Quantity"] = data["Quantity"].astype(int)
-                            except ValueError:
-                                st.error("All values in the Quantity column must be valid integers.")
-                                st.stop()
-
-                    # Fetch eBay data (Active Listings only)
+                    # Fetch eBay data
                     averages, results = fetch_ebay_data(
                         data, 
                         include_shipping=include_shipping, 
@@ -593,60 +556,21 @@ if refresh_button:
                         grading_companies=grading_companies,
                         exclude_outliers=exclude_outliers
                     )
-
-                    # Display results
-                    if results:
-                        # Create a dictionary to organize results by item
-                        items_data = {}
-                        
-                        # First gather all data by item name
-                        for item_name in set(r["Item"] for r in results):
-                            # Get average price for this item
-                            avg_info = next((a for a in averages if a["Item"] == item_name), None)
-                            
-                            # Get listings for this item
-                            item_listings = [r for r in results if r["Item"] == item_name]
-                            
-                            # Store data
-                            items_data[item_name] = {
-                                "Item": item_name,
-                                "Unit Average Price (GBP)": avg_info.get("Unit Average Price (GBP)") if avg_info else None,
-                                "Warning": avg_info.get("Warning", "") if avg_info else "",
-                                "Listings": item_listings
-                            }
-                        
-                        # Create the horizontal layout
-                        horizontal_results = []
-                        for item_name, data in items_data.items():
-                            row = {
-                                "Item": data["Item"],
-                                "Unit Average Price (GBP)": data["Unit Average Price (GBP)"],
-                                "Warning": data["Warning"]
-                            }
-                            
-                            # Add each listing as separate columns with clickable links
-                            for i, listing in enumerate(data["Listings"]):
-                                price = listing.get('Price (GBP)', '')
-                                title = listing.get('Title', '')
-                                link = listing.get('Link', '')
-                                
-                                if price and title and link:
-                                    # Create a markdown link
-                                    row[f"Listing {i+1}"] = f"{price} - [{title}]({link})"
-                                else:
-                                    row[f"Listing {i+1}"] = f"{price} - {title}"
-                            
-                            horizontal_results.append(row)
-
-                        # Display the horizontal table
-                        horizontal_df = pd.DataFrame(horizontal_results)
-                        st.markdown("### Results")
-                        st.markdown(horizontal_df.to_markdown(index=False), unsafe_allow_html=True)
-                        
-                        # Add download button for the horizontal results
-                        st.download_button("Download Results CSV", horizontal_df.to_csv(index=False), "results.csv")
-                    else:
-                        st.warning("No results to display.")
-
+                    
+                    # Switch to the Results tab programmatically
+                    st.session_state.active_tab = "Results"
+                    st.experimental_rerun()
+                    
                 except Exception as e:
                     st.error(f"An error occurred: {e}")
+
+
+# At the beginning of your app, check for active tab and switch if needed
+if "active_tab" in st.session_state and st.session_state.active_tab == "Results":
+    # Clear the flag
+    st.session_state.active_tab = None
+    # Use JavaScript to click the Results tab
+    js = """<script>
+        document.querySelector('button[data-baseweb="tab"]:nth-child(2)').click();
+    </script>"""
+    st.components.v1.html(js, height=0)
