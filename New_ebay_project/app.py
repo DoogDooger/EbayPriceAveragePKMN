@@ -286,42 +286,47 @@ if st.button("Refresh Prices"):
 
             # Display results
             if results:
-                # Create a single combined table
-                combined_results = []
-                for _, avg_row in zip(range(len(averages)), averages):
-                    item_name = avg_row["Item"]
-                    avg_price = avg_row["Unit Average Price (GBP)"]
-                    warning = avg_row["Warning"]
+                # Create a dictionary to organize results by item
+                items_data = {}
+                
+                # First gather all data by item name
+                for item_name in set(r["Item"] for r in results):
+                    # Get average price for this item
+                    avg_info = next((a for a in averages if a["Item"] == item_name), None)
                     
-                    # Add a row with the average price
-                    combined_results.append({
+                    # Get listings for this item
+                    item_listings = [r for r in results if r["Item"] == item_name]
+                    
+                    # Store data
+                    items_data[item_name] = {
                         "Item": item_name,
-                        "Type": "AVERAGE PRICE",
-                        "Title": "",
-                        "Price (GBP)": avg_price,
-                        "Warning": warning,
-                        "Link": ""
-                    })
+                        "Unit Average Price (GBP)": avg_info.get("Unit Average Price (GBP)") if avg_info else None,
+                        "Warning": avg_info.get("Warning", "") if avg_info else "",
+                        "Listings": item_listings
+                    }
+                
+                # Create the horizontal layout
+                horizontal_results = []
+                for item_name, data in items_data.items():
+                    row = {
+                        "Item": data["Item"],
+                        "Unit Average Price (GBP)": data["Unit Average Price (GBP)"],
+                        "Warning": data["Warning"]
+                    }
                     
-                    # Add the individual listings for this item
-                    item_results = [r for r in results if r["Item"] == item_name]
-                    for result in item_results:
-                        combined_results.append({
-                            "Item": result["Item"],
-                            "Type": "Listing",
-                            "Title": result["Title"],
-                            "Price (GBP)": result["Price (GBP)"],
-                            "Warning": "",
-                            "Link": result["Link"]
-                        })
+                    # Add each listing as separate columns
+                    for i, listing in enumerate(data["Listings"]):
+                        row[f"Listing {i+1}"] = f"{listing.get('Price (GBP)', '')} - {listing.get('Title', '')}"
+                    
+                    horizontal_results.append(row)
                 
-                # Display the combined table
-                combined_df = pd.DataFrame(combined_results)
+                # Display the horizontal table
+                horizontal_df = pd.DataFrame(horizontal_results)
                 st.markdown("### Results")
-                st.markdown(combined_df.to_markdown(index=False), unsafe_allow_html=True)
+                st.markdown(horizontal_df.to_markdown(index=False), unsafe_allow_html=True)
                 
-                # Add download button for the combined results
-                st.download_button("Download Results CSV", combined_df.to_csv(index=False), "results.csv")
+                # Add download button for the horizontal results
+                st.download_button("Download Results CSV", horizontal_df.to_csv(index=False), "results.csv")
             else:
                 st.warning("No results to display.")
 
