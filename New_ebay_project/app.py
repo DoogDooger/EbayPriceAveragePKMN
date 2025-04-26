@@ -48,6 +48,10 @@ def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_m
     """Fetches eBay data item by item and includes individual listings in the results."""
     results = []
     averages = []  # Store average prices for each item
+    
+    # Define the complete list of grading companies to filter
+    all_grading_companies = ["PSA", "BECKETT", "BGS", "CGC", "SGC", "AGS", "TAG", "ACE"]
+    
     for _, row in data.iterrows():
         # Fetch data
         item_name = row["Item"]
@@ -58,23 +62,12 @@ def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_m
             item_name, 
             include_shipping=include_shipping, 
             sale_type=sale_type, 
-            grading_companies=grading_companies  # Pass selected grading companies
+            grading_companies=grading_companies,  # Pass selected grading companies
+            all_grading_companies=all_grading_companies  # Pass ALL grading companies for filtering
         )
-
-        # Filter out results with grading company names if no grading companies are selected
-        if not grading_companies:
-            filtered_prices = []
-            filtered_links = []
-            filtered_titles = []
-            for price, link, title in zip(prices, links, titles):
-                if not any(company.lower() in title.lower() for company in ["PSA", "BGS", "CGC", "SGC"]):  # Add grading companies here
-                    filtered_prices.append(price)
-                    filtered_links.append(link)
-                    filtered_titles.append(title)
-            prices = filtered_prices
-            links = filtered_links
-            titles = filtered_titles
-
+        
+        # No need for additional filtering here as we'll handle it all in get_active_listings
+        
         # Recalculate average price after filtering
         avg_price = sum(prices) / len(prices) if prices else None
         averages.append({"Item": item_name, "Unit Average Price (GBP)": avg_price, "Warning": warning})
@@ -122,9 +115,13 @@ def base64_credentials():
     credentials = f"{EBAY_API_CLIENT_ID}:{EBAY_API_CLIENT_SECRET}"
     return base64.b64encode(credentials.encode()).decode()
 
-def get_active_listings(item_name, include_shipping, sale_type, grading_companies=[]):
+def get_active_listings(item_name, include_shipping, sale_type, grading_companies=[], all_grading_companies=None):
     """Fetch active listings from eBay using the Browse API with pagination."""
     try:
+        # Use default list if none provided
+        if all_grading_companies is None:
+            all_grading_companies = ["PSA", "BECKETT", "BGS", "CGC", "SGC", "AGS", "TAG", "ACE"]
+            
         # Get a new access token
         access_token = get_access_token()
 
@@ -188,38 +185,25 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
         filtered_prices = []
         filtered_links = []
         filtered_titles = []
+        
         for price, link, title in zip(all_prices, all_links, all_titles):
-            # Normalize item_name and title by removing apostrophes
-            normalized_item_name = item_name.lower().replace("'", "")
-            normalized_title = title.lower().replace("'", "")
-
-            # Split the item_name into components (e.g., words or numbers)
-            item_name_components = normalized_item_name.split()
-
-            # Calculate the match ratio
-            matched_components = sum(1 for component in item_name_components if component in normalized_title)
-            match_ratio = matched_components / len(item_name_components)
-
-            # Set a threshold for matching (e.g., 75%)
-            item_name_match = match_ratio >= 0.75
+            title_lower = title.lower()
             
-            # Check if the title contains ANY grading company name
-            contains_grading = any(company.lower() in normalized_title for company in ["PSA", "BGS", "CGC", "SGC", "BECKETT", "AGS", "TAG", "ACE"])
-            
-            # If no grading companies are selected, exclude ALL items with grading company names
-            if not grading_companies and contains_grading:
+            # Check if no grading companies selected - filter out ALL items with ANY grading company
+            if not grading_companies:
+                # Skip this item if it contains any grading company name
+                if any(company.lower() in title_lower for company in all_grading_companies):
+                    continue
+            # If grading companies are selected, only include items with those specific companies
+            elif not any(company.lower() in title_lower for company in grading_companies):
                 continue
                 
-            # If grading companies are selected, only include items with the selected grading companies
-            if grading_companies and not any(company.lower() in normalized_title for company in grading_companies):
-                continue
-                
-            # Add to filtered results if both checks pass
-            if item_name_match:
+            # Basic item name matching - simplify this for now
+            if item_name.lower().replace("'", "") in title_lower.replace("'", ""):
                 filtered_prices.append(price)
                 filtered_links.append(link)
                 filtered_titles.append(title)
-
+            
         # Combine the filtered results into a single list of tuples
         filtered_results = list(zip(filtered_prices, filtered_links, filtered_titles))
 
