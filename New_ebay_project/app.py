@@ -50,7 +50,7 @@ def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_m
     averages = []  # Store average prices for each item
     
     # Define the complete list of grading companies to filter
-    all_grading_companies = ["PSA", "BECKETT", "BGS", "CGC", "SGC", "AGS", "TAG", "ACE"]
+    all_grading_companies = ["PSA", "BECKETT", "BGS", "CGC", "SGC", "AGS", "TAG", "ACE", "PG", "GET GRADED"]
     
     for _, row in data.iterrows():
         # Fetch data
@@ -121,6 +121,9 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
         # Use default list if none provided
         if all_grading_companies is None:
             all_grading_companies = ["PSA", "BECKETT", "BGS", "CGC", "SGC", "AGS", "TAG", "ACE"]
+        
+        # Words to exclude from search results
+        excluded_words = ["Magnetic", "Stand", "Proxy", "Custom", "Box", "Playmat"]
             
         # Get a new access token
         access_token = get_access_token()
@@ -189,6 +192,10 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
         for price, link, title in zip(all_prices, all_links, all_titles):
             title_lower = title.lower()
             
+            # Skip if title contains any excluded words
+            if any(word.lower() in title_lower for word in excluded_words):
+                continue
+                
             # Check if no grading companies selected - filter out ALL items with ANY grading company
             if not grading_companies:
                 # Skip this item if it contains any grading company name
@@ -255,12 +262,18 @@ include_shipping = st.checkbox("Include shipping cost")
 sale_type = st.selectbox("Sale Type", ["Buy It Now", "Auction", "Both"])
 listing_count = st.radio("Number of active listings to consider", [3, 5, 10])
 
-# Grading company filter
-grading_companies = st.multiselect(
-    "Select Grading Companies to Include",
-    ["PSA", "BECKETT", "CGC", "AGS", "TAG", "ACE"],
-    default=["PSA", "BECKETT", "CGC", "ACE"]  # Default selected companies
-)
+# Grading filter section
+card_grading = st.radio("Card Grading", ["Graded", "Non-Graded"])
+
+# Only show grading companies multiselect if "Graded" is selected
+grading_companies = []
+if card_grading == "Graded":
+    grading_companies = st.multiselect(
+        "Select Grading Companies to Include",
+        ["PSA", "BECKETT", "CGC", "AGS", "TAG", "ACE"],
+        default=["PSA", "BECKETT", "CGC", "ACE"]  # Default selected companies
+    )
+# For "Non-Graded" option, grading_companies remains empty, which will filter out all graded cards
 
 # Refresh button
 if st.button("Refresh Prices"):
