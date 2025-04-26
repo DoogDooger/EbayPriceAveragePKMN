@@ -77,13 +77,23 @@ def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_m
         # Recalculate average price after filtering
         avg_price = sum(prices) / len(prices) if prices else None
 
-        # Process results
-        result = {
-            "Item": item_name,
-            "Unit Average Price (GBP)": avg_price,
-            "Warning": warning
-        }
-        results.append(result)
+        # Add individual listings to the results
+        for price, link, title in zip(prices, links, titles):
+            results.append({
+                "Item": item_name,
+                "Title": title,
+                "Price (GBP)": price,
+                "Link": link
+            })
+
+        # Add a warning if no listings are found
+        if not prices:
+            results.append({
+                "Item": item_name,
+                "Title": "No matching listings found.",
+                "Price (GBP)": None,
+                "Link": None
+            })
 
     return results
 
