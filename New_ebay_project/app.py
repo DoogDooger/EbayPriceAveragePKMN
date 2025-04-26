@@ -60,25 +60,32 @@ def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_m
             grading_companies=grading_companies  # Pass selected grading companies
         )
 
+        # Filter out results with grading company names if no grading companies are selected
+        if not grading_companies:
+            filtered_prices = []
+            filtered_links = []
+            filtered_titles = []
+            for price, link, title in zip(prices, links, titles):
+                if not any(company.lower() in title.lower() for company in ["PSA", "BGS", "CGC", "SGC"]):  # Add grading companies here
+                    filtered_prices.append(price)
+                    filtered_links.append(link)
+                    filtered_titles.append(title)
+            prices = filtered_prices
+            links = filtered_links
+            titles = filtered_titles
+
+        # Recalculate average price after filtering
+        avg_price = sum(prices) / len(prices) if prices else None
+
         # Process results
         result = {
             "Item": item_name,
             "Unit Average Price (GBP)": avg_price,
             "Warning": warning
         }
-        # Add individual listings to the result
-        for i, (price, link, title) in enumerate(zip(prices, links, titles)):
-            # Move the link to the item name instead of the price
-            result[f"Listing {i + 1}"] = f"{price} - [{title}]({link})"  # Link is now on the item name
-        if quantity_mode == "Quantity":
-            result["Quantity"] = quantity
-            result["Total Price (GBP)"] = avg_price * quantity
         results.append(result)
 
-    # Convert results to a DataFrame
-    df = pd.DataFrame(results)
-
-    return df
+    return results
 
 def get_access_token():
     """Generates a new access token using the refresh token."""
