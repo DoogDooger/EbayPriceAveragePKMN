@@ -202,10 +202,20 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
 
             # Set a threshold for matching (e.g., 75%)
             item_name_match = match_ratio >= 0.75
-            grading_company_match = any(company.lower() in normalized_title for company in grading_companies) if grading_companies else True
-
+            
+            # Check if the title contains ANY grading company name
+            contains_grading = any(company.lower() in normalized_title for company in ["PSA", "BGS", "CGC", "SGC", "BECKETT", "AGS", "TAG", "ACE"])
+            
+            # If no grading companies are selected, exclude ALL items with grading company names
+            if not grading_companies and contains_grading:
+                continue
+                
+            # If grading companies are selected, only include items with the selected grading companies
+            if grading_companies and not any(company.lower() in normalized_title for company in grading_companies):
+                continue
+                
             # Add to filtered results if both checks pass
-            if item_name_match and grading_company_match:
+            if item_name_match:
                 filtered_prices.append(price)
                 filtered_links.append(link)
                 filtered_titles.append(title)
@@ -292,18 +302,42 @@ if st.button("Refresh Prices"):
 
             # Display results
             if results:
-                # Display average prices
-                averages_df = pd.DataFrame(averages)  # Convert averages to a DataFrame
-                st.markdown("### Average Prices")
-                st.markdown(averages_df.to_markdown(index=False), unsafe_allow_html=True)
-
-                # Display individual listings
-                results_df = pd.DataFrame(results)  # Convert the list of results to a DataFrame
-                st.markdown("### Individual Listings")
-                st.markdown(results_df.to_markdown(index=False), unsafe_allow_html=True)
-
-                # Add download button for individual listings
-                st.download_button("Download Listings CSV", results_df.to_csv(index=False), "listings.csv")
+                # Create a single combined table
+                combined_results = []
+                for _, avg_row in zip(range(len(averages)), averages):
+                    item_name = avg_row["Item"]
+                    avg_price = avg_row["Unit Average Price (GBP)"]
+                    warning = avg_row["Warning"]
+                    
+                    # Add a row with the average price
+                    combined_results.append({
+                        "Item": item_name,
+                        "Type": "AVERAGE PRICE",
+                        "Title": "",
+                        "Price (GBP)": avg_price,
+                        "Warning": warning,
+                        "Link": ""
+                    })
+                    
+                    # Add the individual listings for this item
+                    item_results = [r for r in results if r["Item"] == item_name]
+                    for result in item_results:
+                        combined_results.append({
+                            "Item": result["Item"],
+                            "Type": "Listing",
+                            "Title": result["Title"],
+                            "Price (GBP)": result["Price (GBP)"],
+                            "Warning": "",
+                            "Link": result["Link"]
+                        })
+                
+                # Display the combined table
+                combined_df = pd.DataFrame(combined_results)
+                st.markdown("### Results")
+                st.markdown(combined_df.to_markdown(index=False), unsafe_allow_html=True)
+                
+                # Add download button for the combined results
+                st.download_button("Download Results CSV", combined_df.to_csv(index=False), "results.csv")
             else:
                 st.warning("No results to display.")
 
