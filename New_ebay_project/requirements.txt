@@ -1,4 +1,4 @@
 streamlit
 pandas
-ebay-sdk
 python-dotenv
+requests
