@@ -405,10 +405,38 @@ st.markdown("""
 # Use a nicer header with the CSS class
 st.markdown("<h1 class='main-header'>eBay Price Averager</h1>", unsafe_allow_html=True)
 
-# Create tabs for better organization with references we can control
-tab1, tab2, tab3 = st.tabs(["Search", "Results", "Help"])
+# Set up tab navigation
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "Search"
 
-with tab1:
+# Navigation with radio buttons styled to look like tabs
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    st.session_state.active_tab = st.radio("", ["Search", "Results", "Help"], 
+                                          index=["Search", "Results", "Help"].index(st.session_state.active_tab),
+                                          horizontal=True, label_visibility="collapsed")
+
+# Add some styling to make it look more like tabs
+st.markdown("""
+<style>
+    div[data-testid="stHorizontalRadio"] label {
+        background-color: #f0f2f6;
+        padding: 10px 20px;
+        border-radius: 5px 5px 0 0;
+        min-width: 100px;
+        text-align: center;
+    }
+    div[data-testid="stHorizontalRadio"] label:hover {
+        background-color: #e0e2e6;
+    }
+    div.stRadio > div[role="radiogroup"] > label[data-baseweb="radio"] > div:first-child {
+        display: none;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Content based on active tab
+if st.session_state.active_tab == "Search":
     # Input mode selection with working tooltips
     st.markdown("#### Input Method")
     col1, col2 = st.columns([3, 1])
@@ -443,7 +471,7 @@ with tab1:
                 st.caption("Format: item name")
         elif input_mode == "CSV Mode":
             uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-            if quantity_mode == "Quantity":  # Add the missing "==" comparison operator
+            if quantity_mode == "No Quantity":  # Add the missing "==" comparison operator
                 st.caption("CSV must contain 'Item' and 'Quantity' columns")
             else:
                 st.caption("CSV must contain an 'Item' column")
@@ -487,11 +515,11 @@ with tab1:
         refresh_button = st.button("🔄 Refresh Prices", use_container_width=True)
 
 # Results tab will be populated later
-with tab2:
+elif st.session_state.active_tab == "Results":  
     st.info("Click 'Refresh Prices' on the Search tab to see results here.")
 
 # Help tab with usage instructions
-with tab3:
+elif st.session_state.active_tab == "Help":
     st.subheader("How to Use This App")
     st.markdown("""
     ### Basic Usage
@@ -511,7 +539,7 @@ with tab3:
     - Use the CSV mode for bulk processing
     """)
 
-# In the Refresh button section, add tab switching
+# In the refresh button handler:
 if refresh_button:
     # Check if input is empty
     if input_mode == "Paste Mode" and not user_input.strip():
@@ -519,58 +547,6 @@ if refresh_button:
     elif input_mode == "CSV Mode" and not uploaded_file:
         st.error("No CSV file uploaded. Please upload a file then try again.")
     else:
-        with tab2:  # Put results directly in tab2
-            with st.spinner("Fetching data from eBay..."):
-                try:
-                    # Parse input
-                    if input_mode == "Paste Mode":
-                        data = parse_input(user_input, quantity_mode)
-                        
-                        # Check if parsing resulted in empty dataframe
-                        if data.empty:
-                            st.error("No valid items found in input. Please check format and try again.")
-                            st.stop()
-                            
-                    elif input_mode == "CSV Mode" and uploaded_file:
-                        data = pd.read_csv(uploaded_file)
-                        if quantity_mode == "No Quantity":
-                            data = data[["Item"]]  # Keep only the Item column
-                        
-                        # Check if CSV has required columns
-                        if "Item" not in data.columns:
-                            st.error("CSV file must contain an 'Item' column. Please fix and try again.")
-                            st.stop()
-                        
-                        # Check if CSV has any rows
-                        if data.empty:
-                            st.error("CSV file contains no data. Please add items and try again.")
-                            st.stop()
-
-                    # Fetch eBay data
-                    averages, results = fetch_ebay_data(
-                        data, 
-                        include_shipping=include_shipping, 
-                        sale_type=sale_type, 
-                        listing_count=listing_count, 
-                        quantity_mode=quantity_mode, 
-                        grading_companies=grading_companies,
-                        exclude_outliers=exclude_outliers
-                    )
-                    
-                    # Switch to the Results tab programmatically
-                    st.session_state.active_tab = "Results"
-                    st.experimental_rerun()
-                    
-                except Exception as e:
-                    st.error(f"An error occurred: {e}")
-
-
-# At the beginning of your app, check for active tab and switch if needed
-if "active_tab" in st.session_state and st.session_state.active_tab == "Results":
-    # Clear the flag
-    st.session_state.active_tab = None
-    # Use JavaScript to click the Results tab
-    js = """<script>
-        document.querySelector('button[data-baseweb="tab"]:nth-child(2)').click();
-    </script>"""
-    st.components.v1.html(js, height=0)
+        # Switch to Results tab
+        st.session_state.active_tab = "Results" 
+        st.rerun()  # Use st.rerun() instead of st.experimental_rerun()
