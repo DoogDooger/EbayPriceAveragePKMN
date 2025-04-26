@@ -377,82 +377,104 @@ if card_grading == "Graded":
 
 # Refresh button
 if st.button("Refresh Prices"):
-    with st.spinner("Fetching data from eBay..."):
-        try:
-            # Parse input
-            if input_mode == "Paste Mode":
-                data = parse_input(user_input, quantity_mode)
-            elif input_mode == "CSV Mode" and uploaded_file:
-                data = pd.read_csv(uploaded_file)
-                if quantity_mode == "No Quantity":
-                    data = data[["Item"]]  # Keep only the Item column
-
-            # Fetch eBay data (Active Listings only)
-            averages, results = fetch_ebay_data(
-                data, 
-                include_shipping=include_shipping, 
-                sale_type=sale_type, 
-                listing_count=listing_count, 
-                quantity_mode=quantity_mode, 
-                grading_companies=grading_companies,
-                exclude_outliers=exclude_outliers  # Pass the new parameter
-            )
-
-            # Display results
-            if results:
-                # Create a dictionary to organize results by item
-                items_data = {}
-                
-                # First gather all data by item name
-                for item_name in set(r["Item"] for r in results):
-                    # Get average price for this item
-                    avg_info = next((a for a in averages if a["Item"] == item_name), None)
+    # Check if input is empty
+    if input_mode == "Paste Mode" and not user_input.strip():
+        st.error("No items entered. Please enter items then try again.")
+    elif input_mode == "CSV Mode" and not uploaded_file:
+        st.error("No CSV file uploaded. Please upload a file then try again.")
+    else:
+        with st.spinner("Fetching data from eBay..."):
+            try:
+                # Parse input
+                if input_mode == "Paste Mode":
+                    data = parse_input(user_input, quantity_mode)
                     
-                    # Get listings for this item
-                    item_listings = [r for r in results if r["Item"] == item_name]
-                    
-                    # Store data
-                    items_data[item_name] = {
-                        "Item": item_name,
-                        "Unit Average Price (GBP)": avg_info.get("Unit Average Price (GBP)") if avg_info else None,
-                        "Warning": avg_info.get("Warning", "") if avg_info else "",
-                        "Listings": item_listings
-                    }
-                
-                # Create the horizontal layout
-                horizontal_results = []
-                for item_name, data in items_data.items():
-                    row = {
-                        "Item": data["Item"],
-                        "Unit Average Price (GBP)": data["Unit Average Price (GBP)"],
-                        "Warning": data["Warning"]
-                    }
-                    
-                    # Add each listing as separate columns with clickable links
-                    for i, listing in enumerate(data["Listings"]):
-                        price = listing.get('Price (GBP)', '')
-                        title = listing.get('Title', '')
-                        link = listing.get('Link', '')
+                    # Check if parsing resulted in empty dataframe
+                    if data.empty:
+                        st.error("No valid items found in input. Please check format and try again.")
+                        st.stop()
                         
-                        if price and title and link:
-                            # Create a markdown link
-                            row[f"Listing {i+1}"] = f"{price} - [{title}]({link})"
-                        else:
-                            row[f"Listing {i+1}"] = f"{price} - {title}"
+                elif input_mode == "CSV Mode" and uploaded_file:
+                    data = pd.read_csv(uploaded_file)
+                    if quantity_mode == "No Quantity":
+                        data = data[["Item"]]  # Keep only the Item column
                     
-                    horizontal_results.append(row)
+                    # Check if CSV has required columns
+                    if "Item" not in data.columns:
+                        st.error("CSV file must contain an 'Item' column. Please fix and try again.")
+                        st.stop()
+                    
+                    # Check if CSV has any rows
+                    if data.empty:
+                        st.error("CSV file contains no data. Please add items and try again.")
+                        st.stop()
 
-                # Display the horizontal table
-                horizontal_df = pd.DataFrame(horizontal_results)
-                st.markdown("### Results")
-                st.markdown(horizontal_df.to_markdown(index=False), unsafe_allow_html=True)
-                
-                # Add download button for the horizontal results
-                st.download_button("Download Results CSV", horizontal_df.to_csv(index=False), "results.csv")
-            else:
-                st.warning("No results to display.")
+                # Fetch eBay data (Active Listings only)
+                averages, results = fetch_ebay_data(
+                    data, 
+                    include_shipping=include_shipping, 
+                    sale_type=sale_type, 
+                    listing_count=listing_count, 
+                    quantity_mode=quantity_mode, 
+                    grading_companies=grading_companies,
+                    exclude_outliers=exclude_outliers
+                )
 
-        except ConnectionError as e:
-            st.error("Error connecting to eBay API. Please try again later.")
-        except Exception as e:
-            st.error(f"An unexpected error occurred: {e}")
+                # Display results
+                if results:
+                    # Create a dictionary to organize results by item
+                    items_data = {}
+                    
+                    # First gather all data by item name
+                    for item_name in set(r["Item"] for r in results):
+                        # Get average price for this item
+                        avg_info = next((a for a in averages if a["Item"] == item_name), None)
+                        
+                        # Get listings for this item
+                        item_listings = [r for r in results if r["Item"] == item_name]
+                        
+                        # Store data
+                        items_data[item_name] = {
+                            "Item": item_name,
+                            "Unit Average Price (GBP)": avg_info.get("Unit Average Price (GBP)") if avg_info else None,
+                            "Warning": avg_info.get("Warning", "") if avg_info else "",
+                            "Listings": item_listings
+                        }
+                    
+                    # Create the horizontal layout
+                    horizontal_results = []
+                    for item_name, data in items_data.items():
+                        row = {
+                            "Item": data["Item"],
+                            "Unit Average Price (GBP)": data["Unit Average Price (GBP)"],
+                            "Warning": data["Warning"]
+                        }
+                        
+                        # Add each listing as separate columns with clickable links
+                        for i, listing in enumerate(data["Listings"]):
+                            price = listing.get('Price (GBP)', '')
+                            title = listing.get('Title', '')
+                            link = listing.get('Link', '')
+                            
+                            if price and title and link:
+                                # Create a markdown link
+                                row[f"Listing {i+1}"] = f"{price} - [{title}]({link})"
+                            else:
+                                row[f"Listing {i+1}"] = f"{price} - {title}"
+                        
+                        horizontal_results.append(row)
+
+                    # Display the horizontal table
+                    horizontal_df = pd.DataFrame(horizontal_results)
+                    st.markdown("### Results")
+                    st.markdown(horizontal_df.to_markdown(index=False), unsafe_allow_html=True)
+                    
+                    # Add download button for the horizontal results
+                    st.download_button("Download Results CSV", horizontal_df.to_csv(index=False), "results.csv")
+                else:
+                    st.warning("No results to display.")
+
+            except ConnectionError as e:
+                st.error("Error connecting to eBay API. Please try again later.")
+            except Exception as e:
+                st.error(f"An unexpected error occurred: {e}")
