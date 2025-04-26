@@ -281,7 +281,7 @@ def improved_item_matching(item_name, title):
     return match_ratio >= 0.75  # Adjust threshold as needed
 
 def filter_outliers(prices, links, titles):
-    """Filter out price outliers using IQR method."""
+    """Filter out price outliers using IQR method with more aggressive filtering."""
     if len(prices) < 4:  # Need at least 4 data points for meaningful outlier detection
         return prices, links, titles
         
@@ -293,15 +293,23 @@ def filter_outliers(prices, links, titles):
     q3 = np.percentile(prices_array, 75)
     iqr = q3 - q1
     
-    # Define outlier boundaries (1.5 is the standard factor for outliers)
-    lower_bound = q1 - 1.5 * iqr
-    upper_bound = q3 + 1.5 * iqr
+    # Define outlier boundaries (use 1.5 for standard outliers, but we'll use a tighter bound)
+    # For more aggressive filtering, reduce the multiplier from 1.5 to 1.0
+    lower_bound = q1 - 1.0 * iqr
+    upper_bound = q3 + 1.0 * iqr
     
     # Filter out outliers
     filtered_indices = []
     for i, price in enumerate(prices):
         if lower_bound <= price <= upper_bound:
             filtered_indices.append(i)
+    
+    # If filtering removed too many results (less than 3), use a less aggressive approach
+    if len(filtered_indices) < 3 and len(prices) > 3:
+        # Try again with standard 1.5 IQR
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        filtered_indices = [i for i, price in enumerate(prices) if lower_bound <= price <= upper_bound]
     
     # Extract non-outlier data
     filtered_prices = [prices[i] for i in filtered_indices]
