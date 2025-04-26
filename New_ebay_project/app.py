@@ -314,12 +314,20 @@ if st.button("Refresh Prices"):
                         "Warning": data["Warning"]
                     }
                     
-                    # Add each listing as separate columns
+                    # Add each listing as separate columns with clickable links
                     for i, listing in enumerate(data["Listings"]):
-                        row[f"Listing {i+1}"] = f"{listing.get('Price (GBP)', '')} - {listing.get('Title', '')}"
+                        price = listing.get('Price (GBP)', '')
+                        title = listing.get('Title', '')
+                        link = listing.get('Link', '')
+                        
+                        if price and title and link:
+                            # Create a markdown link
+                            row[f"Listing {i+1}"] = f"{price} - [{title}]({link})"
+                        else:
+                            row[f"Listing {i+1}"] = f"{price} - {title}"
                     
                     horizontal_results.append(row)
-                
+
                 # Display the horizontal table
                 horizontal_df = pd.DataFrame(horizontal_results)
                 st.markdown("### Results")
