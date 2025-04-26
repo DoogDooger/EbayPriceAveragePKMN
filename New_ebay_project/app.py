@@ -11,6 +11,8 @@ import requests
 import time
 from datetime import datetime, timezone
 import math
+from scipy import stats
+import numpy as np
 
 # Load environment variables from .env file
 load_dotenv()
@@ -44,7 +46,7 @@ def parse_input(user_input, quantity_mode):
     return pd.DataFrame(data)
 
 @st.cache_data
-def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_mode, grading_companies=[]):
+def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_mode, grading_companies=[], exclude_outliers=False):
     """Fetches eBay data item by item and includes individual listings in the results."""
     results = []
     averages = []  # Store average prices for each item
@@ -62,8 +64,9 @@ def fetch_ebay_data(data, include_shipping, sale_type, listing_count, quantity_m
             item_name, 
             include_shipping=include_shipping, 
             sale_type=sale_type, 
-            grading_companies=grading_companies,  # Pass selected grading companies
-            all_grading_companies=all_grading_companies  # Pass ALL grading companies for filtering
+            grading_companies=grading_companies,
+            all_grading_companies=all_grading_companies,
+            exclude_outliers=exclude_outliers  # Pass the new parameter
         )
         
         # No need for additional filtering here as we'll handle it all in get_active_listings
@@ -115,7 +118,7 @@ def base64_credentials():
     credentials = f"{EBAY_API_CLIENT_ID}:{EBAY_API_CLIENT_SECRET}"
     return base64.b64encode(credentials.encode()).decode()
 
-def get_active_listings(item_name, include_shipping, sale_type, grading_companies=[], all_grading_companies=None):
+def get_active_listings(item_name, include_shipping, sale_type, grading_companies=[], all_grading_companies=None, exclude_outliers=False):
     """Fetch active listings from eBay using the Browse API with pagination."""
     try:
         # Use default list if none provided
@@ -277,6 +280,36 @@ def improved_item_matching(item_name, title):
     match_ratio = matches / len(item_tokens)
     return match_ratio >= 0.75  # Adjust threshold as needed
 
+def filter_outliers(prices, links, titles):
+    """Filter out price outliers using IQR method."""
+    if len(prices) < 4:  # Need at least 4 data points for meaningful outlier detection
+        return prices, links, titles
+        
+    # Convert to numpy array for stats operations
+    prices_array = np.array(prices)
+    
+    # Calculate Q1, Q3 and IQR
+    q1 = np.percentile(prices_array, 25)
+    q3 = np.percentile(prices_array, 75)
+    iqr = q3 - q1
+    
+    # Define outlier boundaries (1.5 is the standard factor for outliers)
+    lower_bound = q1 - 1.5 * iqr
+    upper_bound = q3 + 1.5 * iqr
+    
+    # Filter out outliers
+    filtered_indices = []
+    for i, price in enumerate(prices):
+        if lower_bound <= price <= upper_bound:
+            filtered_indices.append(i)
+    
+    # Extract non-outlier data
+    filtered_prices = [prices[i] for i in filtered_indices]
+    filtered_links = [links[i] for i in filtered_indices]
+    filtered_titles = [titles[i] for i in filtered_indices]
+    
+    return filtered_prices, filtered_links, filtered_titles
+
 # Streamlit app logic starts here
 st.title("eBay Price Averager")
 
@@ -297,6 +330,7 @@ elif input_mode == "CSV Mode":
 
 # Filtering options
 include_shipping = st.checkbox("Include shipping cost")
+exclude_outliers = st.checkbox("Exclude outliers")  # Add this checkbox
 sale_type = st.selectbox("Sale Type", ["Buy It Now", "Auction", "Both"])
 listing_count = st.radio("Number of active listings to consider", [3, 5, 10])
 
@@ -332,7 +366,8 @@ if st.button("Refresh Prices"):
                 sale_type=sale_type, 
                 listing_count=listing_count, 
                 quantity_mode=quantity_mode, 
-                grading_companies=grading_companies  # Pass selected grading companies
+                grading_companies=grading_companies,
+                exclude_outliers=exclude_outliers  # Pass the new parameter
             )
 
             # Display results
