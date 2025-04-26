@@ -279,8 +279,12 @@ if st.button("Refresh Prices"):
             )
 
             # Display results
-            st.markdown(results.to_markdown(index=False), unsafe_allow_html=True)
-            st.download_button("Download CSV", results.to_csv(index=False), "results.csv")
+            if results:
+                results_df = pd.DataFrame(results)  # Convert the list of results to a DataFrame
+                st.markdown(results_df.to_markdown(index=False), unsafe_allow_html=True)
+                st.download_button("Download CSV", results_df.to_csv(index=False), "results.csv")
+            else:
+                st.warning("No results to display.")
 
         except ConnectionError as e:
             st.error("Error connecting to eBay API. Please try again later.")
