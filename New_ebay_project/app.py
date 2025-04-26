@@ -124,6 +124,9 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
         
         # Words to exclude from search results
         excluded_words = ["Magnetic", "Stand", "Proxy", "Custom", "Box", "Playmat"]
+        
+        # Check if item name contains "promo"
+        is_promo_search = "promo" in item_name.lower()
             
         # Get a new access token
         access_token = get_access_token()
@@ -196,6 +199,10 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
             if any(word.lower() in title_lower for word in excluded_words):
                 continue
                 
+            # If searching for a promo item, ensure the listing contains "promo"
+            if is_promo_search and "promo" not in title_lower:
+                continue
+                
             # Check if no grading companies selected - filter out ALL items with ANY grading company
             if not grading_companies:
                 # Skip this item if it contains any grading company name
@@ -206,7 +213,7 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
                 continue
                 
             # Basic item name matching - simplify this for now
-            if item_name.lower().replace("'", "") in title_lower.replace("'", ""):
+            if improved_item_matching(item_name, title):
                 filtered_prices.append(price)
                 filtered_links.append(link)
                 filtered_titles.append(title)
@@ -238,6 +245,37 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
         raise Exception(f"Error parsing response: {e}")
     except Exception as e:
         raise Exception(f"Error fetching active listings for {item_name}: {e}")
+
+def improved_item_matching(item_name, title):
+    # Normalize text: lowercase and remove apostrophes
+    norm_item = item_name.lower().replace("'", "")
+    norm_title = title.lower().replace("'", "")
+    
+    # Check for exact substring match first (current approach)
+    if norm_item in norm_title:
+        return True
+    
+    # Split into tokens/words
+    item_tokens = norm_item.split()
+    title_tokens = norm_title.split()
+    
+    # Check if most of the search terms appear in the title
+    matches = 0
+    for token in item_tokens:
+        # Special handling for card numbers (e.g., 183/159)
+        if '/' in token and any('/' in t for t in title_tokens):
+            card_numbers = [t for t in title_tokens if '/' in t]
+            if any(token == num for num in card_numbers):
+                matches += 1
+                continue
+        
+        # Regular token matching
+        if token in title_tokens or any(token in t for t in title_tokens):
+            matches += 1
+    
+    # Return True if most tokens match (e.g., 75% or more)
+    match_ratio = matches / len(item_tokens)
+    return match_ratio >= 0.75  # Adjust threshold as needed
 
 # Streamlit app logic starts here
 st.title("eBay Price Averager")
