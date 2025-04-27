@@ -147,7 +147,7 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
         item_lower = item_name.lower()
         is_promo_search = "promo" in item_lower
         is_pokemon_center_promo = any(pc in item_lower for pc in ["pokemon center promo", "pokemon centre promo"])
-            
+
         # Get a new access token
         access_token = get_access_token()
 
@@ -174,6 +174,7 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
         all_prices = []
         all_links = []
         all_titles = []
+        all_conditions = []  # Add this line to store condition descriptions
         offset = 0
         limit = 50  # eBay API allows up to 50 items per page
 
@@ -204,60 +205,128 @@ def get_active_listings(item_name, include_shipping, sale_type, grading_companie
                 price = float(item["price"]["value"])
                 if include_shipping and "shippingOptions" in item:
                     price += float(item["shippingOptions"][0]["shippingCost"]["value"])
+                
+                # Extract condition information - less invasive debug approach
+                condition_description = ""
+                condition_display_name = "Unknown"
+                if "condition" in item:
+                    condition_info = item["condition"]
+                    
+                    # Extract condition safely
+                    if isinstance(condition_info, dict):
+                        condition_display_name = condition_info.get("conditionDisplayName", "Unknown")
+                        condition_description = condition_info.get("conditionDescription", "")
+                    else:
+                        condition_description = str(condition_info)
+                else:
+                    condition_description = ""
+
+                # Store data without excessive debugging output
                 all_prices.append(price)
                 all_links.append(item.get("itemWebUrl", "").replace("ebay.com", "ebay.co.uk"))
                 all_titles.append(item.get("title", ""))
+                # Store condition information for filtering - include display name as well
+                all_conditions.append(f"{condition_display_name} {condition_description}".lower())
 
             # Check if there are more pages
             if "next" not in response_data:
                 break
             offset += limit  # Move to the next page
 
-        # Filter results locally
+        # After collecting all listings but before filtering
+
+        # Filter results locally 
         filtered_prices = []
         filtered_links = []
         filtered_titles = []
-        
-        for price, link, title in zip(all_prices, all_links, all_titles):
+
+        for price, link, title, condition in zip(all_prices, all_links, all_titles, all_conditions):
             title_lower = title.lower()
+            should_include = True
             
-            # Skip if title contains any excluded words
-            if any(word.lower() in title_lower for word in excluded_words):
-                continue
-            
-            # Promo filtering logic:
-            # 1. If searching for Pokémon Center/Centre promo, only include listings with those terms
-            # 2. If searching for regular promo (but not Pokémon Center), exclude Pokémon Center/Centre promos
-            # 3. If not searching for promos at all, this section doesn't apply
-            
-            if is_pokemon_center_promo:
-                # Must contain either "pokemon center" or "pokemon centre"
-                if not any(pc in title_lower for pc in ["pokemon center", "pokemon centre"]):
-                    continue
-                    
-            elif is_promo_search:
-                # If just "promo" (not Pokémon Center promo), exclude Pokémon Center/Centre promos
-                if any(pc in title_lower for pc in ["pokemon center", "pokemon centre"]):
-                    continue
-                # Must contain "promo"
-                if "promo" not in title_lower:
-                    continue
-            
-            # Check if no grading companies selected - filter out ALL items with ANY grading company
-            if not grading_companies:
-                # Skip this item if it contains any grading company name
-                if any(company.lower() in title_lower for company in all_grading_companies):
-                    continue
-            # If grading companies are selected, only include items with those specific companies
-            elif not any(company.lower() in title_lower for company in grading_companies):
+            # Step 1: Check excluded words in title and condition
+            if any(word.lower() in title_lower for word in excluded_words) or any(word.lower() in condition for word in excluded_words):
+                should_include = False
                 continue
                 
-            # Basic item name matching
-            if improved_item_matching(item_name, title):
+            # Step 2: Handle promo-specific filtering
+            if is_promo_search:
+                # Item must have "promo" in title
+                if "promo" not in title_lower:
+                    should_include = False
+                    continue
+                    
+                # Special case for Pokemon Center promo searches
+                if is_pokemon_center_promo:
+                    # Must have either "pokemon center" or "pokemon centre" in the title
+                    if not any(pc in title_lower for pc in ["pokemon center", "pokemon centre"]):
+                        should_include = False
+                        continue
+                # Regular promo searches (NOT Pokemon Center promo)
+                else:
+                    # Must NOT contain Pokemon Center/Centre - MORE THOROUGH CHECK
+                    # Normalize accented characters for comparison
+                    normalized_title = title_lower.replace("é", "e").replace("è", "e")
+                    
+                    # Check for various Center/Centre patterns with both normalized and original text
+                    center_patterns = [
+                        "pokemon center", "pokemon centre", 
+                        "center stamped", "centre stamped", 
+                        "pc stamped", "pc stamp", 
+                        "center pc", "centre pc",
+                        "pokémon center", "pokémon centre"  # Explicit check with accented é
+                    ]
+                    
+                    has_center_phrase = any(pattern in normalized_title or pattern in title_lower 
+                                           for pattern in center_patterns)
+                    
+                    if has_center_phrase:
+                        should_include = False
+                        continue
+
+            # Step 3: Handle grading company filtering
+            combined_text = title_lower + " " + condition  # Combine title and condition for filtering
+
+            if not grading_companies:
+                # For "Non-Graded" option
+                # More intelligent check for graded cards
+                is_graded = False
+                
+                # Skip items that are explicitly graded
+                # Check for exact grading company names or explicit mention of "graded"
+                # Don't match "ungraded" as "graded"
+                if "graded" in combined_text and "ungraded" not in combined_text:
+                    is_graded = True
+                # Check for specific grading companies with space before/after to avoid partial matches
+                elif any(f" {company.lower()} " in f" {combined_text} " for company in all_grading_companies):
+                    is_graded = True
+                # Also check for PSA followed by a number (common grading format)
+                elif any(f"psa {str(i)}" in combined_text for i in range(1, 11)):
+                    is_graded = True
+                    
+                if is_graded:
+                    should_include = False
+                    continue
+            else:
+                # For "Graded" option with specific companies selected
+                # This case is working fine, keep it as is
+                is_graded_by_selected = any(f" {company.lower()} " in f" {combined_text} " for company in grading_companies)
+                
+                if not is_graded_by_selected:
+                    should_include = False
+                    continue
+                    
+            # Step 4: Basic item matching
+            if not improved_item_matching(item_name, title):
+                should_include = False
+                continue
+                
+            # If we got here, the item passed all filters
+            if should_include:
                 filtered_prices.append(price)
                 filtered_links.append(link)
                 filtered_titles.append(title)
-            
+
         # Combine the filtered results into a single list of tuples
         filtered_results = list(zip(filtered_prices, filtered_links, filtered_titles))
 
